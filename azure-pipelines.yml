@@ -1,0 +1,141 @@
+trigger:
+- main
+
+pool:
+  name: AgentVK
+
+variables:
+  workingDir: $(System.DefaultWorkingDirectory)
+
+stages:
+
+# -------------------------
+# Stage 1 : Terraform Init & Validate
+# -------------------------
+
+- stage: Terraform_Init_Validate
+  displayName: Terraform Init and Validate
+
+  jobs:
+  - job: InitValidate
+    displayName: Init and Validate
+
+    steps:
+
+    - checkout: self
+
+    - task: TerraformInstaller@1
+      displayName: Install Terraform
+      inputs:
+        terraformVersion: 'latest'
+
+    - task: TerraformTaskV4@4
+      displayName: Terraform Init
+      inputs:
+        provider: azurerm
+        command: init
+        workingDirectory: $(workingDir)
+
+    - task: TerraformTaskV4@4
+      displayName: Terraform Validate
+      inputs:
+        provider: azurerm
+        command: validate
+        workingDirectory: $(workingDir)
+
+
+# -------------------------
+# Stage 2 : Terraform Plan
+# -------------------------
+
+- stage: Terraform_Plan
+  displayName: Terraform Plan
+  dependsOn: Terraform_Init_Validate
+
+  jobs:
+  - job: Plan
+
+    steps:
+
+    - checkout: self
+
+    - task: TerraformInstaller@1
+      displayName: Install Terraform
+      inputs:
+        terraformVersion: 'latest'
+
+    - task: TerraformTaskV4@4
+      displayName: Terraform Init
+      inputs:
+        provider: azurerm
+        command: init
+        workingDirectory: $(workingDir)
+
+    - task: TerraformTaskV4@4
+      displayName: Terraform Plan
+      inputs:
+        provider: azurerm
+        command: plan
+        environmentServiceNameAzureRM: 'azure-connection'
+        workingDirectory: $(workingDir)
+
+
+# -------------------------
+# Stage 3 : Terraform Apply
+# -------------------------
+
+- stage: Terraform_Apply
+  displayName: Terraform Apply
+  dependsOn: Terraform_Plan
+
+  jobs:
+  - job: Apply
+
+    steps:
+
+    - checkout: self
+
+    - task: TerraformInstaller@1
+      displayName: Install Terraform
+      inputs:
+        terraformVersion: 'latest'
+
+    - task: TerraformTaskV4@4
+      displayName: Terraform Init
+      inputs:
+        provider: azurerm
+        command: init
+        workingDirectory: $(workingDir)
+
+    - task: TerraformTaskV4@4
+      displayName: Terraform Apply
+      inputs:
+        provider: azurerm
+        command: apply
+        commandOptions: -auto-approve
+        environmentServiceNameAzureRM: 'azure-connection'
+        workingDirectory: $(workingDir)
+
+
+# -------------------------
+# Stage 4 : Ansible Configuration
+# -------------------------
+
+- stage: Ansible_Config
+  displayName: Configure Nginx with Ansible
+  dependsOn: Terraform_Apply
+
+  jobs:
+  - job: Ansible
+
+    steps:
+
+    - checkout: self
+
+    - task: Ansible@0
+      displayName: Run Ansible Playbook
+      inputs:
+        ansibleInterface: agentMachine
+        playbookPathOnAgentMachine: ansible/install_nginx.yaml
+        inventoriesAgentMachine: file
+        inventoryFileOnAgentMachine: ansible/inventory
