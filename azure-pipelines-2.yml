@@ -1,0 +1,137 @@
+trigger: none
+
+parameters:
+- name: runScanning
+  type: boolean
+  default: true
+
+- name: runDestroy
+  type: boolean
+  default: false
+
+variables: 
+  WorkingDir: $(System.DefaultWorkingDirectory)
+  VkScerte: vk-secret
+
+pool: AgentVK
+
+stages:
+
+# ---------------- Build Stage ----------------
+
+- stage: Build_Stage
+  displayName: Build Stage
+  jobs:
+
+  - job: Terraform_Install_Init
+    steps:
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: 'latest'
+
+    - task: TerraformTask@5
+      displayName: Init
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        backendServiceArm: $(VkScerte)
+        backendAzureRmResourceGroupName: 'rg-terraform-state'
+        backendAzureRmStorageAccountName: 'stgformstate231023'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'terraform.tfstate'
+
+  - job: TerraformPlan
+    dependsOn: Terraform_Install_Init
+    steps:
+
+    - task: TerraformTask@5
+      displayName: Init
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        backendServiceArm: $(VkScerte)
+        backendAzureRmResourceGroupName: 'rg-terraform-state'
+        backendAzureRmStorageAccountName: 'stgformstate231023'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'terraform.tfstate'
+        
+    - task: TerraformTask@5
+      displayName: Plan
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        environmentServiceNameAzureRM: $(VkScerte)
+
+# ---------------- Scanning Stage ----------------
+
+- stage: Scanning_Stage
+  dependsOn: Build_Stage
+  condition: and(succeeded(), eq(${{ parameters.runScanning }}, true))
+  jobs:
+  - job: ScanningJob
+    steps:
+    - task: tfsec@1
+      inputs:
+        version: 'v1.26.0'
+        dir: '$(WorkingDir)'
+
+# ---------------- Deploy Stage ----------------
+
+- stage: Deploy_Stage
+  dependsOn:
+    - Build_Stage
+    - Scanning_Stage
+  condition: succeeded()
+  jobs:
+
+  - job: ManualValidation
+    pool: server
+    steps:
+    - task: ManualValidation@1
+      inputs:
+        notifyUsers: 'vaibhavkhupse116@gmail.com'
+        approvers: 'vaibhavkhupse116@gmail.com'
+        instructions: 'Please review Terraform plan before approval'
+
+  - job: TerraformApply
+    dependsOn: ManualValidation
+    steps:
+    - task: TerraformTask@5
+      displayName: Init
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        backendServiceArm: $(VkScerte)
+        backendAzureRmResourceGroupName: 'rg-terraform-state'
+        backendAzureRmStorageAccountName: 'stgformstate231023'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'terraform.tfstate'
+
+    - task: TerraformTask@5
+      displayName: Apply
+      inputs:
+        provider: 'azurerm'
+        command: 'apply'
+        environmentServiceNameAzureRM: $(VkScerte)
+
+  - job: TerraformDestroy
+    dependsOn: TerraformApply
+    condition: eq(${{ parameters.runDestroy }}, true)
+    steps:
+    - task: TerraformTask@5
+      displayName: Init
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        backendServiceArm: $(VkScerte)
+        backendAzureRmResourceGroupName: 'rg-terraform-state'
+        backendAzureRmStorageAccountName: 'stgformstate231023'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'terraform.tfstate'
+
+    - task: TerraformTask@5
+      displayName: Destroy
+      inputs:
+        provider: 'azurerm'
+        command: 'destroy'
+        environmentServiceNameAzureRM: $(VkScerte)
