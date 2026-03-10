@@ -32,16 +32,21 @@ stages:
     - task: TerraformTaskV4@4
       displayName: Terraform Init
       inputs:
-        provider: azurerm
-        command: init
-        workingDirectory: $(workingDir)
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: '$(workingDir)'
+        backendServiceArm: 'vk-secret'
+        backendAzureRmResourceGroupName: 'rg-terraform-state'
+        backendAzureRmStorageAccountName: 'stgformstate231023'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'dev-tfstate'
 
     - task: TerraformTaskV4@4
       displayName: Terraform Validate
       inputs:
-        provider: azurerm
-        command: validate
-        workingDirectory: $(workingDir)
+        provider: 'azurerm'
+        command: 'validate'
+        workingDirectory: '$(workingDir)'
 
 
 # -------------------------
@@ -67,17 +72,22 @@ stages:
     - task: TerraformTaskV4@4
       displayName: Terraform Init
       inputs:
-        provider: azurerm
-        command: init
-        workingDirectory: $(workingDir)
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: '$(workingDir)'
+        backendServiceArm: 'vk-secret'
+        backendAzureRmResourceGroupName: 'rg-terraform-state'
+        backendAzureRmStorageAccountName: 'stgformstate231023'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'dev-tfstate'
 
     - task: TerraformTaskV4@4
       displayName: Terraform Plan
       inputs:
-        provider: azurerm
-        command: plan
-        environmentServiceNameAzureRM: 'azure-connection'
-        workingDirectory: $(workingDir)
+        provider: 'azurerm'
+        command: 'plan'
+        environmentServiceNameAzureRM: 'vk-secret'
+        workingDirectory: '$(workingDir)'
 
 
 # -------------------------
@@ -103,18 +113,23 @@ stages:
     - task: TerraformTaskV4@4
       displayName: Terraform Init
       inputs:
-        provider: azurerm
-        command: init
-        workingDirectory: $(workingDir)
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: '$(workingDir)'
+        backendServiceArm: 'vk-secret'
+        backendAzureRmResourceGroupName: 'rg-terraform-state'
+        backendAzureRmStorageAccountName: 'stgformstate231023'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'dev-tfstate'
 
     - task: TerraformTaskV4@4
       displayName: Terraform Apply
       inputs:
-        provider: azurerm
-        command: apply
-        commandOptions: -auto-approve
-        environmentServiceNameAzureRM: 'azure-connection'
-        workingDirectory: $(workingDir)
+        provider: 'azurerm'
+        command: 'apply'
+        commandOptions: '-auto-approve'
+        environmentServiceNameAzureRM: 'vk-secret'
+        workingDirectory: '$(workingDir)'
 
 
 # -------------------------
@@ -132,10 +147,6 @@ stages:
 
     - checkout: self
 
-    - task: Ansible@0
+    - script: |
+        ansible-playbook -i ansible/inventory ansible/install_nginx.yaml
       displayName: Run Ansible Playbook
-      inputs:
-        ansibleInterface: agentMachine
-        playbookPathOnAgentMachine: ansible/install_nginx.yaml
-        inventoriesAgentMachine: file
-        inventoryFileOnAgentMachine: ansible/inventory
