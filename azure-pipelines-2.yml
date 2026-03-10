@@ -12,25 +12,28 @@ parameters:
 variables: 
   WorkingDir: $(System.DefaultWorkingDirectory)
   VkScerte: vk-secret
+  TerraformDir: '$(System.DefaultWorkingDirectory)/terraform'
+  EnvVarFile: 'dev.tfvars'  # Change this per environment
 
 pool: AgentVK
 
 stages:
 
 # ---------------- Build Stage ----------------
-
 - stage: Build_Stage
   displayName: Build Stage
   jobs:
 
+  # Install Terraform and Init Backend
   - job: Terraform_Install_Init
+    displayName: Install & Init Terraform
     steps:
     - task: TerraformInstaller@1
       inputs:
         terraformVersion: 'latest'
 
     - task: TerraformTask@5
-      displayName: Init
+      displayName: Terraform Init
       inputs:
         provider: 'azurerm'
         command: 'init'
@@ -39,36 +42,30 @@ stages:
         backendAzureRmStorageAccountName: 'stgformstate231023'
         backendAzureRmContainerName: 'tfstate'
         backendAzureRmKey: 'terraform.tfstate'
+        workingDirectory: $(TerraformDir)
 
+  # Terraform Plan
   - job: TerraformPlan
+    displayName: Terraform Plan
     dependsOn: Terraform_Install_Init
     steps:
-
     - task: TerraformTask@5
-      displayName: Init
-      inputs:
-        provider: 'azurerm'
-        command: 'init'
-        backendServiceArm: $(VkScerte)
-        backendAzureRmResourceGroupName: 'rg-terraform-state'
-        backendAzureRmStorageAccountName: 'stgformstate231023'
-        backendAzureRmContainerName: 'tfstate'
-        backendAzureRmKey: 'terraform.tfstate'
-        
-    - task: TerraformTask@5
-      displayName: Plan
+      displayName: Terraform Plan
       inputs:
         provider: 'azurerm'
         command: 'plan'
         environmentServiceNameAzureRM: $(VkScerte)
+        workingDirectory: $(TerraformDir)
+        commandOptions: '-var-file="$(TerraformDir)/$(EnvVarFile)" -input=false'
 
 # ---------------- Scanning Stage ----------------
-
 - stage: Scanning_Stage
+  displayName: Security Scanning
   dependsOn: Build_Stage
   condition: and(succeeded(), eq(${{ parameters.runScanning }}, true))
   jobs:
   - job: ScanningJob
+    displayName: tfsec Scan
     steps:
     - task: tfsec@1
       inputs:
@@ -76,14 +73,15 @@ stages:
         dir: '$(WorkingDir)'
 
 # ---------------- Deploy Stage ----------------
-
 - stage: Deploy_Stage
+  displayName: Deploy Stage
   dependsOn:
     - Build_Stage
     - Scanning_Stage
   condition: succeeded()
   jobs:
 
+  # Manual Approval
   - job: ManualValidation
     pool: server
     steps:
@@ -93,45 +91,31 @@ stages:
         approvers: 'vaibhavkhupse116@gmail.com'
         instructions: 'Please review Terraform plan before approval'
 
+  # Terraform Apply
   - job: TerraformApply
     dependsOn: ManualValidation
+    displayName: Terraform Apply
     steps:
     - task: TerraformTask@5
-      displayName: Init
-      inputs:
-        provider: 'azurerm'
-        command: 'init'
-        backendServiceArm: $(VkScerte)
-        backendAzureRmResourceGroupName: 'rg-terraform-state'
-        backendAzureRmStorageAccountName: 'stgformstate231023'
-        backendAzureRmContainerName: 'tfstate'
-        backendAzureRmKey: 'terraform.tfstate'
-
-    - task: TerraformTask@5
-      displayName: Apply
+      displayName: Terraform Apply
       inputs:
         provider: 'azurerm'
         command: 'apply'
         environmentServiceNameAzureRM: $(VkScerte)
+        workingDirectory: $(TerraformDir)
+        commandOptions: '-var-file="$(TerraformDir)/$(EnvVarFile)" -input=false -auto-approve'
 
+  # Terraform Destroy (optional)
   - job: TerraformDestroy
     dependsOn: TerraformApply
     condition: eq(${{ parameters.runDestroy }}, true)
+    displayName: Terraform Destroy
     steps:
     - task: TerraformTask@5
-      displayName: Init
-      inputs:
-        provider: 'azurerm'
-        command: 'init'
-        backendServiceArm: $(VkScerte)
-        backendAzureRmResourceGroupName: 'rg-terraform-state'
-        backendAzureRmStorageAccountName: 'stgformstate231023'
-        backendAzureRmContainerName: 'tfstate'
-        backendAzureRmKey: 'terraform.tfstate'
-
-    - task: TerraformTask@5
-      displayName: Destroy
+      displayName: Terraform Destroy
       inputs:
         provider: 'azurerm'
         command: 'destroy'
         environmentServiceNameAzureRM: $(VkScerte)
+        workingDirectory: $(TerraformDir)
+        commandOptions: '-var-file="$(TerraformDir)/$(EnvVarFile)" -input=false -auto-approve'
